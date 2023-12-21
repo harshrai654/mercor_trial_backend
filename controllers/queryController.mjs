@@ -65,12 +65,16 @@ export default {
             console.log(args);
             // Dynamically call the function with function name and arguments
             const output = await tools[functionName].apply(null, [args]);
+            console.log(
+              `Output provided to openAI locally : ${util.inspect(output)}`
+            );
 
             toolOutputs.push({
               tool_call_id: toolCall.id,
               output: JSON.stringify(output),
             });
           }
+
           // Submit tool outputs
           await openai.beta.threads.runs.submitToolOutputs(threadId, run.id, {
             tool_outputs: toolOutputs,
@@ -126,6 +130,9 @@ export default {
   },
 };
 
+/**
+ * Tools object contains OpenAI function call definitions
+ */
 const tools = {
   /**
    * This function fetches candidates data against user's scaler query part
@@ -182,23 +189,27 @@ const tools = {
         response.message = `Call fetchCandidatesWithSemanticQuery by forming 'query' argument by combinign current scaler arguments in natural language`;
       }
 
-      //Where Caluse generator accordind to validated Data
+      //Where Caluse generator according to validated Data
       let whereClause = "";
       if (validatedData.validatedJobType !== null) {
         //jobType condition is present
-        whereClause += `WHERE mu.fullTime = ${validatedData.validatedJobType}`;
+        whereClause += `WHERE ${
+          validatedData.validatedJobType === "True"
+            ? "mu.fullTime = True"
+            : "mu.partTime = True"
+        }`;
 
         if (validatedData.validatedBudget) {
           //jobType + budget is present
           whereClause += ` AND ${
             validatedData.validatedJobType === "False"
-              ? " (mu.partTimeSalary IS NULL OR CAST(mu.partTimeSalary AS SIGNED) "
-              : " (mu.fullTimeSalary IS NULL OR CAST(mu.fullTimeSalary AS SIGNED) "
+              ? " (mu.partTimeSalary IS NULL OR mu.partTimeSalary  "
+              : " (mu.fullTimeSalary IS NULL OR mu.fullTimeSalary "
           } <= ${validatedData.validatedBudget})`;
         }
       } else if (validatedData.validatedBudget) {
         //onlu budget is present
-        whereClause += `WHERE mu.fullTimeSalary IS NULL OR CAST(mu.fullTimeSalary AS SIGNED) <= ${validatedData.validatedBudget}`; //Considering fullTimeSalary if jobType is not defined
+        whereClause += `WHERE mu.fullTimeSalary IS NULL OR mu.fullTimeSalary <= ${validatedData.validatedBudget}`; //Considering fullTimeSalary if jobType is not defined
       } else if (validatedData.validatedSkills === null) {
         return response;
       }
@@ -235,8 +246,8 @@ const tools = {
               }
           FROM
               MercorUsers AS mu
-          LEFT JOIN MercorUserSkills AS mus ON mu.userId = mus.userId
-          LEFT JOIN Skills AS s ON s.skillId = mus.skillId
+          JOIN MercorUserSkills AS mus ON mu.userId = mus.userId
+          JOIN Skills AS s ON s.skillId = mus.skillId
           ${whereClause}
           GROUP BY
               mu.userId
